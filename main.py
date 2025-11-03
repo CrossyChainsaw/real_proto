@@ -227,44 +227,45 @@ class ScanScreen(FloatLayout):
         else:
             self.show_pay_button()
 
-    # ---------------- AI Age Check ----------------
+
     def ask_ai_check(self):
-        # === Custom title bar ===
-        title_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=40, padding=(5, 5))
-        title_label = Label(text="Automatische Leeftijdscontrole (AI)", bold=True)
-        info_btn = Button(
-            text="i",
-            size_hint=(None, 1),
-            width=35,
-            font_size=18,
-            background_normal='',
-            background_color=(0.2, 0.6, 1, 1)  # nice blue info color
-        )
-
-        title_bar.add_widget(title_label)
-        title_bar.add_widget(info_btn)
-
         # === Main popup content ===
         content_layout = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        content_layout.add_widget(Label(text="Wilt u AI gebruiken voor een snelle leeftijdscontrole?"))
 
+        # --- Question + info button centered below ---
+        question_box = BoxLayout(orientation='vertical', spacing=5, size_hint_y=None)
+        question_label = Label(
+            text="Wilt u AI gebruiken voor een snelle leeftijdscontrole?",
+            halign="center",
+            valign="middle",
+            text_size=(380, None)
+        )
+        info_btn = Button(
+            text="i",
+            size_hint=(None, None),
+            size=(35, 35),
+            font_size=18,
+            background_normal='',
+            background_color=(0.2, 0.6, 1, 1),
+            pos_hint={'center_x': 0.5}  # Center horizontally
+        )
+
+        question_box.add_widget(question_label)
+        question_box.add_widget(info_btn)
+        content_layout.add_widget(question_box)
+
+        # --- Yes / No buttons ---
         btn_layout = BoxLayout(spacing=10, size_hint_y=None, height=40)
         yes_btn = Button(text="Yes")
         no_btn = Button(text="No")
         btn_layout.add_widget(yes_btn)
         btn_layout.add_widget(no_btn)
-
         content_layout.add_widget(btn_layout)
 
-        # Combine title bar and content
-        root_layout = BoxLayout(orientation='vertical')
-        root_layout.add_widget(title_bar)
-        root_layout.add_widget(content_layout)
-
-        # === Popup ===
+        # === Popup with visible title ===
         popup = Popup(
-            title="",  # Hide the default title
-            content=root_layout,
+            title="Automatische Leeftijdscontrole (AI)",
+            content=content_layout,
             size_hint=(None, None),
             size=(400, 250),
             auto_dismiss=False
@@ -276,13 +277,11 @@ class ScanScreen(FloatLayout):
         no_btn.bind(on_release=lambda x: self.show_medewerker_on_the_way(popup))
         info_btn.bind(on_release=lambda x: self.show_ai_info_popup())
 
+
     def show_ai_info_popup(self):
         """Shows explanation of the AI age prediction model."""
         info_text = (
-            "Deze AI gebruikt een getraind neuraal netwerk om je leeftijd te schatten "
-            "aan de hand van een foto van je gezicht. "
-            "De analyse gebeurt lokaal — er worden geen beelden opgeslagen of gedeeld.\n\n"
-            "De voorspelling is bedoeld als snelle schatting en vervangt geen handmatige controle."
+            "De automatische controle wordt uitgevoerd door middel van AI. De AI schat je leeftijd in op basis van je gezicht. In dit proces worden geen afbeeldingen opgeslagen."
         )
 
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
