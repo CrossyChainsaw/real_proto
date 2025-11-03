@@ -59,7 +59,6 @@ class FacePreparer:
 
     def from_frame(self, frame):
         """Return a PIL Image of the first detected face."""
-        cv2.imwrite("Frame.png", frame)  # save the raw frame
         results = self.yolo(frame)
         boxes = results[0].boxes.xyxy
         if len(boxes) == 0:

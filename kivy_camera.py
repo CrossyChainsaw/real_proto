@@ -49,7 +49,6 @@ class KivyCamera(Image):
         if len(faces) > 0 and is_image_sharp(frame, threshold=20.0):
             try:
                 age = predict_age(frame)
-                age = 10
                 print("Predicted age:", age)
                 self.parent_screen.handle_ai_age_detected(age)
             except Exception as e:
