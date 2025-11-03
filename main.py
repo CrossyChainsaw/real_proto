@@ -13,15 +13,20 @@ from kivy.uix.image import Image
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
 import cv2
+from kivy_camera import KivyCamera
 
+
+MINIMUM_LEEFTIJD_AUTO_PASS = 25
 Window.clearcolor = (1, 1, 1, 1)
 Window.size = (800, 600)
 
+BEER_NAME = "Heineken (33cl)"
+
 PRODUCTS = [
-    {"name": "Apple", "price": 0.50},
-    {"name": "Banana", "price": 0.30},
-    {"name": "Milk", "price": 1.20},
-    {"name": "Beer", "price": 3.00},
+    {"name": "BIO Komkommer", "price": 0.89},
+    {"name": "Milka Oreon", "price": 1.69},
+    {"name": "Volle Melk", "price": 0.99},
+    {"name": BEER_NAME, "price": 1.35},
 ]
 
 # ---------------- Draggable Product ----------------
@@ -34,7 +39,7 @@ class DraggableProduct(Widget):
     def __init__(self, product, **kwargs):
         super().__init__(**kwargs)
         self.product = product
-        self.size = (50, 50)
+        self.size = (120, 120)
         self.size_hint = (None, None)
         self.pos = (0, 0)
 
@@ -96,21 +101,6 @@ class DraggableProduct(Widget):
         return super().on_touch_up(touch)
 
 
-# ---------------- Kivy Camera Widget ----------------
-class KivyCamera(Image):
-    def __init__(self, capture, fps=30, **kwargs):
-        super().__init__(**kwargs)
-        self.capture = capture
-        Clock.schedule_interval(self.update, 1.0 / fps)
-
-    def update(self, dt):
-        ret, frame = self.capture.read()
-        if ret:
-            frame = cv2.flip(frame, -1)
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            texture = Texture.create(size=(frame.shape[1], frame.shape[0]), colorfmt='rgb')
-            texture.blit_buffer(frame.tobytes(), colorfmt='rgb', bufferfmt='ubyte')
-            self.texture = texture
 
 
 # ---------------- Scan Screen ----------------
@@ -125,8 +115,25 @@ class ScanScreen(FloatLayout):
         self.products_widgets = []
         self.setup_ui()
         self.create_products()
+        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self.age_model = self.load_model(weights_path="epoch_008.pth", device=self.device, snapshot=True)
+
 
     # ---------------- UI Setup ----------------
+    def handle_ai_age_detected(self, age):
+        # Stop camera and close popup
+        if hasattr(self, "cam_capture") and self.cam_capture.isOpened():
+            self.cam_capture.release()
+        if hasattr(self, "cam_popup"):
+            self.cam_popup.dismiss()
+
+        # Continue flow based on age
+        if age >= MINIMUM_LEEFTIJD_AUTO_PASS:
+            self.show_pay_button()
+        else:
+            self.show_medewerker_on_the_way()
+
+    
     def setup_ui(self):
         with self.canvas.before:
             Color(1, 1, 1, 1)
@@ -134,7 +141,7 @@ class ScanScreen(FloatLayout):
         self.bind(size=self.update_bg, pos=self.update_bg)
 
         self.total_label = Label(
-            text="Total: $0.00",
+            text="Totaal: €0.00",
             size_hint=(None, None),
             size=(200, 50),
             pos=(550, 560),
@@ -163,10 +170,10 @@ class ScanScreen(FloatLayout):
         self.add_widget(self.scanner_area)
 
         self.proceed_button = Button(
-            text="Proceed",
+            text="Verder",
             size_hint=(None, None),
             size=(150, 50),
-            pos=(50, 50),
+            pos=(800, 50),
             disabled=True
         )
         self.proceed_button.bind(on_press=self.on_proceed)
@@ -180,7 +187,7 @@ class ScanScreen(FloatLayout):
     def create_products(self):
         start_x = 20
         start_y = 400
-        spacing = 70
+        spacing = 140
         colors = [[1, 0, 0, 1], [0, 1, 0, 1], [0, 0, 1, 1], [1, 1, 0, 1]]
         for idx, p in enumerate(PRODUCTS):
             prod = DraggableProduct(product=p)
@@ -197,13 +204,13 @@ class ScanScreen(FloatLayout):
         self.cart_layout.clear_widgets()
         for item in self.cart:
             self.cart_layout.add_widget(Label(
-                text=f"{item['name']} - ${item['price']:.2f}",
+                text=f"{item['name']} - €{item['price']:.2f}",
                 size_hint_y=None,
                 height=30,
                 color=(0, 0, 0, 1)
             ))
         total = sum(i['price'] for i in self.cart)
-        self.total_label.text = f"Total: ${total:.2f}"
+        self.total_label.text = f"Total: €{total:.2f}"
 
     def enable_proceed(self):
         self.proceed_button.disabled = False
@@ -214,7 +221,7 @@ class ScanScreen(FloatLayout):
         for prod in self.products_widgets:
             prod.disabled_drag = True
 
-        beer_in_cart = any(item["name"].lower() == "beer" for item in self.cart)
+        beer_in_cart = any(item["name"].lower() == "heineken (33cl)" for item in self.cart)
         if beer_in_cart:
             self.ask_ai_check()
         else:
@@ -222,19 +229,76 @@ class ScanScreen(FloatLayout):
 
     # ---------------- AI Age Check ----------------
     def ask_ai_check(self):
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        content.add_widget(Label(text="Do you want to automatically check your age using AI?"))
-        btn_layout = BoxLayout(spacing=10)
+        # === Custom title bar ===
+        title_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=40, padding=(5, 5))
+        title_label = Label(text="Automatische Leeftijdscontrole (AI)", bold=True)
+        info_btn = Button(
+            text="i",
+            size_hint=(None, 1),
+            width=35,
+            font_size=18,
+            background_normal='',
+            background_color=(0.2, 0.6, 1, 1)  # nice blue info color
+        )
+
+        title_bar.add_widget(title_label)
+        title_bar.add_widget(info_btn)
+
+        # === Main popup content ===
+        content_layout = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content_layout.add_widget(Label(text="Wilt u AI gebruiken voor een snelle leeftijdscontrole?"))
+
+        btn_layout = BoxLayout(spacing=10, size_hint_y=None, height=40)
         yes_btn = Button(text="Yes")
         no_btn = Button(text="No")
         btn_layout.add_widget(yes_btn)
         btn_layout.add_widget(no_btn)
-        content.add_widget(btn_layout)
 
-        popup = Popup(title="Age Verification", content=content, size_hint=(None, None), size=(400, 200))
+        content_layout.add_widget(btn_layout)
+
+        # Combine title bar and content
+        root_layout = BoxLayout(orientation='vertical')
+        root_layout.add_widget(title_bar)
+        root_layout.add_widget(content_layout)
+
+        # === Popup ===
+        popup = Popup(
+            title="",  # Hide the default title
+            content=root_layout,
+            size_hint=(None, None),
+            size=(400, 250),
+            auto_dismiss=False
+        )
         popup.open()
+
+        # === Bind buttons ===
         yes_btn.bind(on_release=lambda x: self.ai_age_check(popup))
         no_btn.bind(on_release=lambda x: self.show_medewerker_on_the_way(popup))
+        info_btn.bind(on_release=lambda x: self.show_ai_info_popup())
+
+    def show_ai_info_popup(self):
+        """Shows explanation of the AI age prediction model."""
+        info_text = (
+            "Deze AI gebruikt een getraind neuraal netwerk om je leeftijd te schatten "
+            "aan de hand van een foto van je gezicht. "
+            "De analyse gebeurt lokaal — er worden geen beelden opgeslagen of gedeeld.\n\n"
+            "De voorspelling is bedoeld als snelle schatting en vervangt geen handmatige controle."
+        )
+
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content.add_widget(Label(text=info_text, text_size=(350, None), halign='left', valign='top'))
+
+        close_btn = Button(text="Sluiten", size_hint=(1, 0.3))
+        content.add_widget(close_btn)
+
+        popup = Popup(
+            title="Wat doet de AI?",
+            content=content,
+            size_hint=(None, None),
+            size=(400, 300)
+        )
+        popup.open()
+        close_btn.bind(on_release=popup.dismiss)
 
     def ai_age_check(self, popup):
         popup.dismiss()
@@ -243,6 +307,7 @@ class ScanScreen(FloatLayout):
         layout = FloatLayout(size=(640, 480))
         self.cam_widget = KivyCamera(
             capture=self.cam_capture,
+            parent_screen=self,  # pass ScanScreen instance here
             fps=30,
             size_hint=(1, 1),
             pos_hint={'x': 0, 'y': 0}
@@ -260,7 +325,7 @@ class ScanScreen(FloatLayout):
         layout.add_widget(cancel_btn)
 
         self.cam_popup = Popup(
-            title="AI Age Check",
+            title="Automatische Leeftijdscontrole (AI)",
             content=layout,
             size_hint=(None, None),
             size=(640, 480)
@@ -275,11 +340,12 @@ class ScanScreen(FloatLayout):
         self.show_medewerker_on_the_way(popup)
 
     # ---------------- Medewerker Popup Flow ----------------
-    def show_medewerker_on_the_way(self, popup):
-        popup.dismiss()
+    def show_medewerker_on_the_way(self, popup=None):
+        if popup:
+            popup.dismiss()
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         notice = Label(
-            text="Medewerker is on the way to check your identification",
+            text="Leeftijdscontrole vereist. Een medewerker is onderweg",
             size_hint=(1, None),
             height=50,
             halign="center",
@@ -292,7 +358,7 @@ class ScanScreen(FloatLayout):
         content.add_widget(btn)
 
         self.medewerker_popup = Popup(
-            title="Attention",
+            title="Attentie",
             content=content,
             size_hint=(None, None),
             size=(400, 200),
@@ -328,14 +394,14 @@ class ScanScreen(FloatLayout):
 
     def show_medewerker_panel(self):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        content.add_widget(Label(text="Is the klant 18 or older?"))
+        content.add_widget(Label(text="Is de klant ouder dan 18 jaar?"))
         btn_layout = BoxLayout(spacing=10)
         older_btn = Button(text="Yes")
         younger_btn = Button(text="No")
         btn_layout.add_widget(older_btn)
         btn_layout.add_widget(younger_btn)
         content.add_widget(btn_layout)
-        popup = Popup(title="Age Verification", content=content, size_hint=(None, None), size=(400, 200))
+        popup = Popup(title="Leeftijdscontole", content=content, size_hint=(None, None), size=(400, 200))
         popup.open()
         older_btn.bind(on_release=lambda x: self.age_ok(popup))
         younger_btn.bind(on_release=lambda x: self.age_not_ok(popup))
@@ -360,10 +426,10 @@ class ScanScreen(FloatLayout):
     # ---------------- Pay ----------------
     def show_pay_button(self):
         self.pay_button = Button(
-            text="Pay",
+            text="Betalen",
             size_hint=(None, None),
             size=(150, 50),
-            pos=(220, 50)
+            pos=(800, 120)
         )
         self.pay_button.bind(on_press=self.on_pay)
         self.add_widget(self.pay_button)
@@ -377,7 +443,7 @@ class ScanScreen(FloatLayout):
         self.add_widget(overlay)
 
         thank_you = Label(
-            text="Thank you for testing the prototype!",
+            text="Einde prototype, bedankt voor het testen!",
             size_hint=(None, None),
             size=(400, 50),
             pos=(Window.width/2 - 200, Window.height/2 - 25),
