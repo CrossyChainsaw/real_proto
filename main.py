@@ -106,7 +106,7 @@ class KivyCamera(Image):
     def update(self, dt):
         ret, frame = self.capture.read()
         if ret:
-            frame = cv2.flip(frame, -1)  # horizontal flip for mirror
+            frame = cv2.flip(frame, -1)
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             texture = Texture.create(size=(frame.shape[1], frame.shape[0]), colorfmt='rgb')
             texture.blit_buffer(frame.tobytes(), colorfmt='rgb', bufferfmt='ubyte')
@@ -210,10 +210,7 @@ class ScanScreen(FloatLayout):
 
     # ---------------- Proceed Logic ----------------
     def on_proceed(self, instance):
-        # Disable proceed button immediately to prevent multiple clicks
-        self.proceed_button.disabled = True
-
-        # Stop further dragging of products
+        self.proceed_button.disabled = True  # disable multiple clicks
         for prod in self.products_widgets:
             prod.disabled_drag = True
 
@@ -223,7 +220,7 @@ class ScanScreen(FloatLayout):
         else:
             self.show_pay_button()
 
-
+    # ---------------- AI Age Check ----------------
     def ask_ai_check(self):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         content.add_widget(Label(text="Do you want to automatically check your age using AI?"))
@@ -237,39 +234,31 @@ class ScanScreen(FloatLayout):
         popup = Popup(title="Age Verification", content=content, size_hint=(None, None), size=(400, 200))
         popup.open()
         yes_btn.bind(on_release=lambda x: self.ai_age_check(popup))
-        no_btn.bind(on_release=lambda x: self.ask_medewerker_login(popup))
+        no_btn.bind(on_release=lambda x: self.show_medewerker_on_the_way(popup))
 
-    # ---------------- AI Age Check ----------------
-    # ---------------- AI Age Check ----------------
     def ai_age_check(self, popup):
         popup.dismiss()
-
         # Open camera
         self.cam_capture = cv2.VideoCapture(0)
-        
-        # Layout for camera + cancel button
         layout = FloatLayout(size=(640, 480))
-
-        # Make camera fill the entire layout
         self.cam_widget = KivyCamera(
             capture=self.cam_capture,
             fps=30,
-            size_hint=(1, 1),       # Fill horizontally & vertically
-            pos_hint={'x': 0, 'y': 0}  # Start at bottom-left
+            size_hint=(1, 1),
+            pos_hint={'x': 0, 'y': 0}
         )
         layout.add_widget(self.cam_widget)
 
-        # Cancel button on top
         cancel_btn = Button(
             text="Cancel",
             size_hint=(None, None),
             size=(200, 50),
-            pos_hint={'center_x': 0.5, 'y': 0.02}  # centered horizontally, 2% from bottom
+            pos_hint={'center_x': 0.5, 'y': 0.02}
         )
-        cancel_btn.bind(on_release=self.cancel_ai_age_check)
+        cancel_btn.bind(on_release=lambda _: self.cancel_ai_age_check(popup))
+
         layout.add_widget(cancel_btn)
 
-        # Show popup
         self.cam_popup = Popup(
             title="AI Age Check",
             content=layout,
@@ -278,73 +267,48 @@ class ScanScreen(FloatLayout):
         )
         self.cam_popup.open()
 
-    def cancel_ai_age_check(self, instance):
-        # Stop camera
+    def cancel_ai_age_check(self, popup):
         if hasattr(self, "cam_capture") and self.cam_capture.isOpened():
             self.cam_capture.release()
-        # Close popup
-        self.cam_popup.dismiss()
+        if hasattr(self, "cam_popup"):
+            self.cam_popup.dismiss()
+        self.show_medewerker_on_the_way(popup)
 
-        # Store references so we can remove later
-        self.overlay_widget = Widget(size=Window.size, size_hint=(None, None), pos=(0, 0))
-        with self.overlay_widget.canvas:
-            Color(1, 1, 1, 0.5)
-            Rectangle(pos=(0, 0), size=Window.size)
-        self.add_widget(self.overlay_widget)
-
-        self.notice_label = Label(
+    # ---------------- Medewerker Popup Flow ----------------
+    def show_medewerker_on_the_way(self, popup):
+        popup.dismiss()
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        notice = Label(
             text="Medewerker is on the way to check your identification",
-            size_hint=(None, None),
-            size=(500, 50),
-            pos=(Window.width/2 - 250, Window.height/2 + 20),
-            color=(0, 0, 0, 1),
+            size_hint=(1, None),
+            height=50,
             halign="center",
             valign="middle",
-            text_size=(500, 50)
+            text_size=(400, 50)
         )
-        self.add_widget(self.notice_label)
+        content.add_widget(notice)
 
-        # ---------------- Medewerker Login Button ----------------
-        self.medewerker_btn = Button(
-            text="Medewerker Login",
+        btn = Button(text="Medewerker Login", size_hint=(1, None), height=50)
+        content.add_widget(btn)
+
+        self.medewerker_popup = Popup(
+            title="Attention",
+            content=content,
             size_hint=(None, None),
-            size=(200, 50),
-            pos=(Window.width/2 - 100, Window.height/2 - 40)
+            size=(400, 200),
+            auto_dismiss=False
         )
-        self.medewerker_btn.bind(on_release=self.start_medewerker_login)
-        self.add_widget(self.medewerker_btn)
+        btn.bind(on_release=lambda x: self.start_medewerker_login_from_popup())
+        self.medewerker_popup.open()
 
-    def start_medewerker_login(self, instance):
-        # Remove overlay and button
-        if hasattr(self, "overlay_widget"):
-            self.remove_widget(self.overlay_widget)
-            del self.overlay_widget
-        if hasattr(self, "notice_label"):
-            self.remove_widget(self.notice_label)
-            del self.notice_label
-        if hasattr(self, "medewerker_btn"):
-            self.remove_widget(self.medewerker_btn)
-            del self.medewerker_btn
-
-        # Show the actual login popup
+    def start_medewerker_login_from_popup(self):
+        if hasattr(self, "medewerker_popup"):
+            self.medewerker_popup.dismiss()
+            del self.medewerker_popup
         self.ask_medewerker_login()
 
-
-
-    def confirm_age_ai(self, instance):
-        if hasattr(self, "cam_capture") and self.cam_capture.isOpened():
-            self.cam_capture.release()
-        self.cam_popup.dismiss()
-        age = 18  # replace with AI detection
-        if age >= 18:
-            self.show_pay_button()
-        else:
-            self.remove_beer_completely()
-
     # ---------------- Medewerker Login ----------------
-    def ask_medewerker_login(self, popup=None):
-        if popup:
-            popup.dismiss()
+    def ask_medewerker_login(self):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         self.code_input = TextInput(hint_text="Enter code", multiline=False)
         btn = Button(text="Login")
@@ -378,29 +342,12 @@ class ScanScreen(FloatLayout):
 
     def age_ok(self, popup):
         popup.dismiss()
-        # Remove overlay and notice if they exist
-        if hasattr(self, "overlay_widget"):
-            self.remove_widget(self.overlay_widget)
-            del self.overlay_widget
-        if hasattr(self, "notice_label"):
-            self.remove_widget(self.notice_label)
-            del self.notice_label
-
         self.show_pay_button()
-
 
     def age_not_ok(self, popup):
         popup.dismiss()
-        # Remove overlay and notice if they exist
-        if hasattr(self, "overlay_widget"):
-            self.remove_widget(self.overlay_widget)
-            del self.overlay_widget
-        if hasattr(self, "notice_label"):
-            self.remove_widget(self.notice_label)
-            del self.notice_label
-
-        self.show_pay_button()
         self.remove_beer_completely()
+        self.show_pay_button()
 
     def remove_beer_completely(self):
         self.cart = [p for p in self.cart if p["name"].lower() != "beer"]
@@ -410,6 +357,7 @@ class ScanScreen(FloatLayout):
                 self.products_widgets.remove(prod)
         self.update_cart()
 
+    # ---------------- Pay ----------------
     def show_pay_button(self):
         self.pay_button = Button(
             text="Pay",
