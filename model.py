@@ -96,8 +96,10 @@ def predict_age_from_frame(model, frame, device, face_preparer=None):
     # Predict age
     model.eval()
     with torch.no_grad():
-        output = model(img_tensor)
-        predicted_age = torch.argmax(output, dim=1).item()
+        output = model(img_tensor)  # logits of shape [1, num_ages]
+        probs = torch.softmax(output, dim=1)  # shape [1, num_ages]
+        ages = torch.arange(probs.size(1), dtype=torch.float32).to(probs.device)
+        predicted_age = torch.sum(probs * ages, dim=1).item()
     return predicted_age
 
 # ------------------------- Initialize -------------------------
