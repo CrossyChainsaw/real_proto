@@ -14,6 +14,8 @@ from kivy.clock import Clock
 from kivy.graphics.texture import Texture
 import cv2
 from kivy_camera import KivyCamera
+import sys
+import os
 
 
 MINIMUM_LEEFTIJD_AUTO_PASS = 25
@@ -101,8 +103,6 @@ class DraggableProduct(Widget):
         return super().on_touch_up(touch)
 
 
-
-
 # ---------------- Scan Screen ----------------
 class ScanScreen(FloatLayout):
     scanner_area = ObjectProperty(None)
@@ -115,25 +115,19 @@ class ScanScreen(FloatLayout):
         self.products_widgets = []
         self.setup_ui()
         self.create_products()
-        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # self.age_model = self.load_model(weights_path="epoch_008.pth", device=self.device, snapshot=True)
-
 
     # ---------------- UI Setup ----------------
     def handle_ai_age_detected(self, age):
-        # Stop camera and close popup
         if hasattr(self, "cam_capture") and self.cam_capture.isOpened():
             self.cam_capture.release()
         if hasattr(self, "cam_popup"):
             self.cam_popup.dismiss()
 
-        # Continue flow based on age
         if age >= MINIMUM_LEEFTIJD_AUTO_PASS:
             self.show_pay_button()
         else:
             self.show_medewerker_on_the_way()
 
-    
     def setup_ui(self):
         with self.canvas.before:
             Color(1, 1, 1, 1)
@@ -217,7 +211,7 @@ class ScanScreen(FloatLayout):
 
     # ---------------- Proceed Logic ----------------
     def on_proceed(self, instance):
-        self.proceed_button.disabled = True  # disable multiple clicks
+        self.proceed_button.disabled = True
         for prod in self.products_widgets:
             prod.disabled_drag = True
 
@@ -227,12 +221,8 @@ class ScanScreen(FloatLayout):
         else:
             self.show_pay_button()
 
-
     def ask_ai_check(self):
-        # === Main popup content ===
         content_layout = BoxLayout(orientation='vertical', spacing=10, padding=10)
-
-        # --- Question + info button centered below ---
         question_box = BoxLayout(orientation='vertical', spacing=5, size_hint_y=None)
         question_label = Label(
             text="Wilt u AI gebruiken voor een snelle leeftijdscontrole?",
@@ -247,14 +237,13 @@ class ScanScreen(FloatLayout):
             font_size=18,
             background_normal='',
             background_color=(0.2, 0.6, 1, 1),
-            pos_hint={'center_x': 0.5}  # Center horizontally
+            pos_hint={'center_x': 0.5}
         )
 
         question_box.add_widget(question_label)
         question_box.add_widget(info_btn)
         content_layout.add_widget(question_box)
 
-        # --- Yes / No buttons ---
         btn_layout = BoxLayout(spacing=10, size_hint_y=None, height=40)
         yes_btn = Button(text="Yes")
         no_btn = Button(text="No")
@@ -262,7 +251,6 @@ class ScanScreen(FloatLayout):
         btn_layout.add_widget(no_btn)
         content_layout.add_widget(btn_layout)
 
-        # === Popup with visible title ===
         popup = Popup(
             title="Automatische Leeftijdscontrole (AI)",
             content=content_layout,
@@ -272,14 +260,11 @@ class ScanScreen(FloatLayout):
         )
         popup.open()
 
-        # === Bind buttons ===
         yes_btn.bind(on_release=lambda x: self.ai_age_check(popup))
         no_btn.bind(on_release=lambda x: self.show_medewerker_on_the_way(popup))
         info_btn.bind(on_release=lambda x: self.show_ai_info_popup())
 
-
     def show_ai_info_popup(self):
-        """Shows explanation of the AI age prediction model."""
         info_text = (
             "De automatische controle wordt uitgevoerd door middel van AI. De AI schat je leeftijd in op basis van je gezicht. In dit proces worden geen afbeeldingen opgeslagen."
         )
@@ -301,12 +286,11 @@ class ScanScreen(FloatLayout):
 
     def ai_age_check(self, popup):
         popup.dismiss()
-        # Open camera
         self.cam_capture = cv2.VideoCapture(0)
         layout = FloatLayout(size=(640, 480))
         self.cam_widget = KivyCamera(
             capture=self.cam_capture,
-            parent_screen=self,  # pass ScanScreen instance here
+            parent_screen=self,
             fps=30,
             size_hint=(1, 1),
             pos_hint={'x': 0, 'y': 0}
@@ -338,7 +322,6 @@ class ScanScreen(FloatLayout):
             self.cam_popup.dismiss()
         self.show_medewerker_on_the_way(popup)
 
-    # ---------------- Medewerker Popup Flow ----------------
     def show_medewerker_on_the_way(self, popup=None):
         if popup:
             popup.dismiss()
@@ -372,7 +355,6 @@ class ScanScreen(FloatLayout):
             del self.medewerker_popup
         self.ask_medewerker_login()
 
-    # ---------------- Medewerker Login ----------------
     def ask_medewerker_login(self):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         self.code_input = TextInput(hint_text="Enter code", multiline=False)
@@ -433,6 +415,14 @@ class ScanScreen(FloatLayout):
         self.pay_button.bind(on_press=self.on_pay)
         self.add_widget(self.pay_button)
 
+    def reset_to_home(self):
+        """Reset the screen to the initial product scanning state."""
+        self.clear_widgets()
+        self.cart.clear()
+        self.products_widgets.clear()
+        self.setup_ui()
+        self.create_products()
+
     def on_pay(self, instance):
         self.remove_widget(self.pay_button)
         overlay = Widget(size=Window.size, size_hint=(None, None), pos=(0, 0))
@@ -452,6 +442,14 @@ class ScanScreen(FloatLayout):
             text_size=(400, 50)
         )
         self.add_widget(thank_you)
+
+        # After 5 seconds, reset to the home screen
+        Clock.schedule_once(lambda dt: self.reset_to_home(), 2)
+
+
+    def restart_app(self):
+        python = sys.executable
+        os.execl(python, python, *sys.argv)
 
 
 # ---------------- App ----------------
