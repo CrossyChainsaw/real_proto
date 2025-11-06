@@ -8,7 +8,7 @@ from ultralytics import YOLO
 # ==== CONFIG ====
 YOLO_MODEL_PATH = "yolov8n-face.pt"  # YOLO face detector
 OUTPUT_SIZE = 224
-PADDING_RATIO = 0.12
+PADDING_RATIO = 0.0
 # =================
 
 # ------------------------- Load Age Model -------------------------
@@ -48,6 +48,7 @@ def crop_and_resize(img, box, size=OUTPUT_SIZE, pad_ratio=PADDING_RATIO):
 
     crop = img[y1:y2, x1:x2]
     crop = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+    crop = cv2.rotate(crop, cv2.ROTATE_180)
     resized = cv2.resize(crop, (size, size), interpolation=cv2.INTER_AREA)
     return Image.fromarray(resized)
 
@@ -80,6 +81,9 @@ def predict_age_from_frame(model, frame, device, face_preparer=None):
 
     # Detect and crop face
     face = face_preparer.from_frame(frame)
+
+    face.save('gezicht.png')
+    
 
     # Preprocess for VGG16
     preprocess = transforms.Compose([
